@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using System.IO.Ports;
+using System.Collections;
 
 public class WheelChairController : MonoBehaviour
 {
@@ -19,16 +20,60 @@ public class WheelChairController : MonoBehaviour
     private int _deltaLeft = 0;
     private int _deltaRight = 0;
 
-    private void Start()
+    private Coroutine _movementCoroutine;
+
+    void Start()
     {
+        Console.WriteLine("Starting WheelChairController");
+        _rb = GetComponent<Rigidbody>();
         _serialPortNo.Open();
         _serialPortNo.ReadTimeout = 50;
-        _rb = GetComponent<Rigidbody>();
+       
+        Console.WriteLine("Serial Port Opened: " + _rb);
     }
 
     private void Update()
     {
-        if (!_serialPortNo.IsOpen) return;
+        if (!_serialPortNo.IsOpen)
+        {
+            // Gather ticks from keyboard input if USB is not connected
+            if (Input.GetKey(KeyCode.U))
+            {
+                _deltaLeft = 1;
+            }
+            if (Input.GetKey(KeyCode.J))
+            {
+                _deltaLeft = -1;
+            }
+            if (Input.GetKey(KeyCode.I))
+            {
+                _deltaRight = 1;
+            }
+            if (Input.GetKey(KeyCode.K))
+            {
+                _deltaRight = -1;
+            }
+
+            if (Time.time - _lastUpdateTime >= timeSlice)
+            {
+                var leftDistance = (2 * Mathf.PI * wheelRadius) * (_deltaLeft / ticksPerRevolution);
+                var rightDistance = (2 * Mathf.PI * wheelRadius) * (_deltaRight / ticksPerRevolution);
+
+                if (_movementCoroutine != null)
+                {
+                    StopCoroutine(_movementCoroutine);
+                }
+
+                _movementCoroutine = StartCoroutine(SmoothMovement(leftDistance, rightDistance));
+
+                // Reset deltas and update time
+                _deltaLeft = 0;
+                _deltaRight = 0;
+                _lastUpdateTime = Time.time;
+            }
+
+            return;
+        }
 
         try
         {
@@ -60,28 +105,12 @@ public class WheelChairController : MonoBehaviour
                 var leftDistance = (2 * Mathf.PI * wheelRadius) * (_deltaLeft / ticksPerRevolution);
                 var rightDistance = (2 * Mathf.PI * wheelRadius) * (_deltaRight / ticksPerRevolution);
 
-                if (Mathf.Abs(_deltaLeft) > 0 && Mathf.Abs(_deltaRight) > 0)
+                if (_movementCoroutine != null)
                 {
-                    // Both wheels are moving
-                    var averageDistance = (leftDistance + rightDistance) / 2f;
-                    var movement = transform.forward * averageDistance;
-                    _rb.MovePosition(_rb.position + movement);
+                    StopCoroutine(_movementCoroutine);
+                }
 
-                    var rotationDiff = (rightDistance - leftDistance) / (2f * wheelRadius); // radians
-                    transform.Rotate(Vector3.up, rotationDiff * Mathf.Rad2Deg);
-                }
-                else if (Mathf.Abs(_deltaLeft) > 0)
-                {
-                    // Only left wheel is moving
-                    var rotationDiff = -leftDistance / wheelRadius; // Turn right
-                    transform.Rotate(Vector3.up, rotationDiff * Mathf.Rad2Deg);
-                }
-                else if (Mathf.Abs(_deltaRight) > 0)
-                {
-                    // Only right wheel is moving
-                    var rotationDiff = rightDistance / wheelRadius; // Turn left
-                    transform.Rotate(Vector3.up, rotationDiff * Mathf.Rad2Deg);
-                }
+                _movementCoroutine = StartCoroutine(SmoothMovement(leftDistance, rightDistance));
 
                 // Reset deltas and update time
                 _deltaLeft = 0;
@@ -97,5 +126,53 @@ public class WheelChairController : MonoBehaviour
         {
             Debug.LogWarning("Data parse error: " + e.Message);
         }
+    }
+
+    private IEnumerator SmoothMovement(float leftDistance, float rightDistance)
+    {
+        float duration = 0.2f; // Duration to spread the movement over
+        float elapsedTime = 0f;
+
+        Vector3 initialPosition = _rb.position;
+        Quaternion initialRotation = transform.rotation;
+
+        Vector3 targetPosition = initialPosition;
+        Quaternion targetRotation = initialRotation;
+
+        if (Mathf.Abs(_deltaLeft) > 0 && Mathf.Abs(_deltaRight) > 0)
+        {
+            // Both wheels are moving
+            var averageDistance = (leftDistance + rightDistance) / 2f;
+            targetPosition += transform.forward * averageDistance;
+
+            var rotationDiff = (rightDistance - leftDistance) / (2f * wheelRadius); // radians
+            targetRotation *= Quaternion.Euler(0, rotationDiff * Mathf.Rad2Deg, 0);
+        }
+        else if (Mathf.Abs(_deltaLeft) > 0)
+        {
+            // Only left wheel is moving
+            var rotationDiff = -leftDistance / wheelRadius; // Turn right
+            targetRotation *= Quaternion.Euler(0, rotationDiff * Mathf.Rad2Deg, 0);
+        }
+        else if (Mathf.Abs(_deltaRight) > 0)
+        {
+            // Only right wheel is moving
+            var rotationDiff = rightDistance / wheelRadius; // Turn left
+            targetRotation *= Quaternion.Euler(0, rotationDiff * Mathf.Rad2Deg, 0);
+        }
+
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / duration;
+
+            _rb.MovePosition(Vector3.Lerp(initialPosition, targetPosition, t));
+            transform.rotation = Quaternion.Slerp(initialRotation, targetRotation, t);
+
+            yield return null;
+        }
+
+        _rb.MovePosition(targetPosition);
+        transform.rotation = targetRotation;
     }
 }
