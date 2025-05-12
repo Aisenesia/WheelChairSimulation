@@ -153,12 +153,18 @@ public class WheelChairController : MonoBehaviour
             // Only left wheel is moving
             var rotationDiff = -leftDistance / wheelRadius; // Turn right
             targetRotation *= Quaternion.Euler(0, rotationDiff * Mathf.Rad2Deg, 0);
+
+            // Move slightly forward while turning
+            targetPosition += transform.forward * (Mathf.Abs(leftDistance) / 2f);
         }
         else if (Mathf.Abs(_deltaRight) > 0)
         {
             // Only right wheel is moving
             var rotationDiff = rightDistance / wheelRadius; // Turn left
             targetRotation *= Quaternion.Euler(0, rotationDiff * Mathf.Rad2Deg, 0);
+
+            // Move slightly forward while turning
+            targetPosition += transform.forward * (Mathf.Abs(rightDistance) / 2f);
         }
 
         while (elapsedTime < duration)
