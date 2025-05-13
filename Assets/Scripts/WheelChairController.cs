@@ -5,7 +5,7 @@ using System.Collections;
 
 public class WheelChairController : MonoBehaviour
 {
-    private readonly SerialPort _serialPortNo = new("COM3", 9600);
+    private readonly SerialPort _serialPortNo = new("COM10", 9600);
     public Transform leftWheel;
     public Transform rightWheel;
     public float wheelRadius = 0.3f; // in meters
